@@ -1006,6 +1006,8 @@ int ssl3_send_next_proto(SSL *s);
 # endif
 #endif
 
+int ssl3_fill_client_random(unsigned char *p);
+
 int dtls1_client_hello(SSL *s);
 int dtls1_send_client_certificate(SSL *s);
 int dtls1_send_client_key_exchange(SSL *s);

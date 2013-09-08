@@ -649,13 +649,49 @@ end:
 	return(ret);
 	}
 
+int
+ssl3_fill_client_random(unsigned char *p)
+{
+	long times[2];
+#ifdef OPENSSL_SYS_WIN32
+       struct _timeb tb;
+	_ftime(&tb);
+	times[0] = (long)tb.time;
+	times[1] = (long)tb.millitm * 1000;
+#elif defined(OPENSSL_SYS_VMS)
+	struct timeb tb;
+	ftime(&tb);
+	times[0] = (long)tb.time;
+	times[1] = (long)tb.millitm * 1000;
+#else
+	struct timeval t;
+	gettimeofday(&t, NULL);
+	times[0] = (long)t.tv_sec;
+	times[1] = (long)t.tv_usec;
+#endif
+
+#if SSL3_RANDOM_SIZE != SHA256_DIGEST_LENGTH
+#error "Well, that is certainly a surprise!"
+#endif
+
+	if (RAND_bytes(p, SSL3_RANDOM_SIZE) <= 0)
+		return -1;
+
+	if (HMAC(EVP_sha256(),
+		 p, SSL3_RANDOM_SIZE,
+		 (unsigned char *)times, sizeof(times),
+		 p, NULL) == NULL)
+		return -1;
+
+	return 0;
+}
 
 int ssl3_client_hello(SSL *s)
 	{
 	unsigned char *buf;
 	unsigned char *p,*d;
 	int i;
-	unsigned long Time,l;
+	unsigned long l;
 #ifndef OPENSSL_NO_COMP
 	int j;
 	SSL_COMP *comp;
@@ -680,10 +716,8 @@ int ssl3_client_hello(SSL *s)
 		/* else use the pre-loaded session */
 
 		p=s->s3->client_random;
-		Time=(unsigned long)time(NULL);			/* Time */
-		l2n(Time,p);
-		if (RAND_pseudo_bytes(p,SSL3_RANDOM_SIZE-4) <= 0)
-			goto err;
+		if (ssl3_fill_client_random(p) < 0)
+                    goto err;
 
 		/* Do the message type and length last */
 		d=p= &(buf[4]);
